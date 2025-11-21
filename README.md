@@ -1,4 +1,6 @@
 # CSC649 GROUP ASSIGNMENT
+A Mental Health Support Chatbot for CSC649 Group Assignment
+
 **Created by:**
 
 - Vincent Teo Chee Seng (2024288862)
