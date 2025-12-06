@@ -1,11 +1,8 @@
-from flask import Flask, request, jsonify, render_template
+import streamlit as st
 from openai import OpenAI
-import re
 
-app = Flask(__name__)
-
-# Initialize OpenAI client
-client = OpenAI(api_key="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")
+# Load API key from Streamlit Secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # Crisis keywords for safety check
 CRISIS_KEYWORDS = [
@@ -14,58 +11,65 @@ CRISIS_KEYWORDS = [
 ]
 
 def is_crisis_message(message):
-    """Check if user message contains crisis-related words."""
     text = message.lower()
     return any(keyword in text for keyword in CRISIS_KEYWORDS)
 
-# ---------- HOME ROUTE (Serves index.html) ----------
-@app.route("/")
-def home():
-    return render_template("index.html")
+# -------- STREAMLIT UI --------
+st.set_page_config(page_title="Mental Health Support Chatbot", page_icon="💬")
+st.title("💬 Mental Health Support Chatbot")
+st.write("This chatbot provides **emotional support**, but it is **not a replacement for professional help**.")
 
+# Chat history (keeps messages visible)
+if "history" not in st.session_state:
+    st.session_state.history = []
 
-# ---------- CHAT ROUTE (Handles chatbot responses) ----------
-@app.route("/chat", methods=["POST"])
-def chat():
-    user_message = request.json.get("message", "")
+# User input
+user_message = st.text_input("How are you feeling today?")
 
-    # Crisis Handling
-    if is_crisis_message(user_message):
-        crisis_response = (
-            "I'm really sorry that you're feeling this way. "
-            "Your feelings matter, and you deserve support. "
-            "I’m not able to help in emergencies, but please reach out to someone who can help immediately.\n\n"
-            "📞 Emergency Resources:\n"
-            "- Contact your local emergency number\n"
-            "- Reach out to a trusted friend or family member\n"
-            "- Call your nearest mental health crisis hotline\n\n"
-            "You aren’t alone—please seek immediate help."
-        )
-        return jsonify({"response": crisis_response})
+if st.button("Send"):
+    if not user_message.strip():
+        st.warning("Please type a message.")
+    else:
+        # Crisis detection
+        if is_crisis_message(user_message):
+            crisis_reply = (
+                "I'm really sorry that you're feeling this way. 💛\n\n"
+                "Your feelings matter and you deserve support.\n\n"
+                "⚠️ **I can’t help in emergencies**, but please contact:\n"
+                "- Your local emergency number\n"
+                "- A trusted friend or family member\n"
+                "- A mental health crisis hotline\n\n"
+                "You are not alone — please seek immediate help. ❤️"
+            )
+            st.session_state.history.append(("You", user_message))
+            st.session_state.history.append(("Bot", crisis_reply))
+        else:
+            # System prompt
+            system_prompt = """
+            You are a mental health support chatbot.
+            Provide empathetic, calming, and supportive responses.
+            Do NOT give professional medical advice or diagnoses.
+            Use simple, warm, comforting language.
+            If user mentions suicide or self-harm, DO NOT answer normally. Trigger crisis safety message.
+            """
 
-    # Safe system prompt
-    system_prompt = """
-    You are a mental health support chatbot.
-    Provide empathetic, calming, and supportive responses.
-    Do NOT give professional medical advice or diagnoses.
-    Use simple, warm, comforting language.
-    If user mentions suicide or self-harm, DO NOT answer normally. Trigger crisis safety message.
-    """
+            # OpenAI response
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7
+            )
+            bot_reply = response.choices[0].message.content
 
-    # OpenAI API call
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ],
-        temperature=0.7
-    )
+            st.session_state.history.append(("You", user_message))
+            st.session_state.history.append(("Bot", bot_reply))
 
-    bot_reply = response.choices[0].message.content
-    return jsonify({"response": bot_reply})
-
-
-# ---------- RUN SERVER ----------
-if __name__ == "__main__":
-    app.run(debug=True)
+# Display chat history
+for sender, msg in st.session_state.history:
+    if sender == "You":
+        st.markdown(f"**🧑 You:** {msg}")
+    else:
+        st.markdown(f"**🤖 Bot:** {msg}")
